@@ -1,6 +1,6 @@
 # kirocrew-on-lambda
 
-A cheap remote [KiroCrew](https://download.crew.kiro.dev) crew on AWS Lambda.
+A cheap remote [KiroCrew](https://kiro.dev/crew/) crew on AWS Lambda.
 
 - The **gateway** runs on a **Lambda MicroVM**. It installs the latest stable KiroCrew with the official installer.
 - The **OpenCode harness** runs in a **Lambda Web Function** on free models (`opencode serve`), with conversations kept in S3.
@@ -12,7 +12,7 @@ KiroCrew is not patched. The only seams used are its Agent Harness setting (`age
 laptop KiroCrew --(SSM Run Command + Session Manager, your IAM)--> MicroVM: KiroCrew gateway (crew user)
                                                                      | harness = opencode, OPENCODE_BIN = acp_shim
                                                                      v
-                       acp_shim (ACP on stdio) --> loopback relay (SigV4 with the VM's role)
+                       acp_shim (ACP on stdio) --> loopback relay (SigV4 with the MicroVM's role)
                                                                      v
                        Lambda Web Function: opencode serve, free model, transcripts in S3
 ```
@@ -23,9 +23,9 @@ Tested in **us-east-1** only, in one account. Treat it as a working prototype.
 
 | Verified | Not verified |
 |---|---|
-| A chat turn through the real gateway reaches the Web Function and answers | Remote Crew "Connect" from the laptop after the last fix (the VM registers and shows Online) |
+| A chat turn through the real gateway reaches the Web Function and answers | Remote Crew "Connect" from the laptop after the last fix (the MicroVM registers and shows Online) |
 | A second turn in the same session remembers the first | A deploy in a second AWS account |
-| A new VM continues the same session (state restored from S3) | An 8-hour launch, cost per turn at scale |
+| A new MicroVM continues the same session (state restored from S3) | An 8-hour Lambda MicroVM launch, cost per turn at scale |
 | Turns that move between Web Function environments keep their history | Tool use on the remote harness (chat only) |
 
 ## Prerequisites
@@ -65,8 +65,8 @@ Settings (environment variables):
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `CREW_LIFETIME_SECS` | 3600 | VM lifetime cap; the platform maximum is 28800 (8 h) |
-| `CREW_IDLE_SECS` | the lifetime | Suspend after this many idle seconds. A suspended VM freezes the SSM agent and SSM does not wake it |
+| `CREW_LIFETIME_SECS` | 3600 | MicroVM lifetime cap; the platform maximum is 28800 (8 h) |
+| `CREW_IDLE_SECS` | the lifetime | Suspend after this many idle seconds. A suspended MicroVM freezes the SSM agent and SSM does not wake it |
 | `CREW_HARNESS` | the saved one | `opencode` or `strands` for this boot |
 | `NIM_KEY_PARAM` | `/nim-free/api-key` | SSM parameter that holds the NIM key |
 | `KIROCREW_CHANNEL` | `stable` | Docker build argument for the installer channel. Add `--version X.Y.Z` to the installer line in `crew/image/Dockerfile` to pin a release |
@@ -91,11 +91,11 @@ Example: 2 hours a day for 20 days is about $5.04 for the MicroVM and $1.04 for 
 
 What protects it:
 
-- **No secrets in the repo or the image.** The NIM key is read from SSM at boot with the VM's role. The gateway's vault and signing keys are never copied to S3 (the state sync skips them by name and location).
+- **No secrets in the repo or the image.** The NIM key is read from SSM at boot with the MicroVM's role. The gateway's vault and signing keys are never copied to S3 (the state sync skips them by name and location).
 - **Web Function endpoint uses IAM auth.** The crew's role may invoke that one endpoint only. Its own role may read and write `sessions/*` in one private bucket.
 - **MicroVM access** needs a token that lasts 15 minutes and covers only ports 8080 and 8081.
 - **SSM** access is an IAM decision on the node. The activation is single-use and expires in an hour; its code is never printed or logged.
-- **One root process.** The SSM agent must run as root, and the VM forbids `sudo` (no-new-privileges). A small helper (`crew/image/guest/ssm-helper.py`) listens on a unix socket, accepts one request, validates every field against a strict pattern, registers once, and starts the agent. The hook server and the gateway run as the `crew` user.
+- **One root process.** The SSM agent must run as root, and the MicroVM forbids `sudo` (no-new-privileges). A small helper (`crew/image/guest/ssm-helper.py`) listens on a unix socket, accepts one request, validates every field against a strict pattern, registers once, and starts the agent. The hook server and the gateway run as the `crew` user.
 - **Buckets** block public access, require TLS and expire or retain by purpose. The Web Function's transcripts expire after 14 days.
 - **Model allowlist.** The Web Function accepts only two free models whose provider states zero retention and no training.
 - No dependency vulnerabilities reported by `npm audit` (dev tooling only).
@@ -103,8 +103,8 @@ What protects it:
 What to know:
 
 - Conversation text (prompts and answers) is stored in S3 and sent to the free model provider. Do not use it for confidential work.
-- The hook server and the dashboard forwarder bind all interfaces inside the VM. They are reachable only through the platform proxy, which requires the token above.
-- The loopback relay can be called by any process in the VM, including the agent's own tools. It can only reach the one Web Function.
+- The hook server and the dashboard forwarder bind all interfaces inside the MicroVM. They are reachable only through the platform proxy, which requires the token above.
+- The loopback relay can be called by any process in the MicroVM, including the agent's own tools. It can only reach the one Web Function.
 - The installer is downloaded at build time and verifies a signed release feed. Pin a version for reproducible builds.
 - `python3.15` on Web Functions is a public preview.
 
