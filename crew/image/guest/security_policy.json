@@ -1,0 +1,1 @@
+{"version": 1, "boot": {}, "tools": {"mode": "deny", "deny": ["web_fetch", "web_search", "webfetch", "websearch", "codesearch", "http://*", "https://*"]}, "network": {"egress": {"mode": "deny", "deny": ["*"]}}}

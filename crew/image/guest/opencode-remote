@@ -1,0 +1,10 @@
+#!/bin/bash
+# Stand-in for the `opencode` binary, selected with OPENCODE_BIN by hooks.py when a Web Function is configured.
+# KiroCrew calls the binary three ways:
+#   --version, debug config  -> the real OpenCode answers (KiroCrew checks the major version and reads its permission config back)
+#   acp                      -> the ACP shim, which relays prompts to the Web Function through the loopback relay
+set -u
+case "${1:-}" in
+  acp) exec /opt/venv/bin/python /opt/guest/acp_shim.py ;;
+  *)   exec /usr/local/bin/opencode "$@" ;;
+esac
